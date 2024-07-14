@@ -79,7 +79,7 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
 
     }
 
-
+// remove on production
 }).DisableAntiforgery();
 
 
