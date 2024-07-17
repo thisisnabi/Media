@@ -25,4 +25,9 @@ public class UrlToken
 
     public required string ContentType { get; set; }
 
+    public DateTime ExpaireOn { get; set; }
+
+    public int CountAccess { get; set; }
+    public int LimitationAccess { get; set; }
+
 }

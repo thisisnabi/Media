@@ -3,7 +3,6 @@ using Media.Infrastructure;
 using Media.Infrastructure.IntegrationEvents;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Minio;
 using Minio.DataModel.Args;
 
@@ -14,8 +13,8 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<MediaDbContext>(configure =>
 {
-    configure.UseInMemoryDatabase("test");
-});
+    configure.UseInMemoryDatabase(Guid.NewGuid().ToString());
+}); 
 
 builder.BrokerConfiure();
 
@@ -65,6 +64,7 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
             BacketName = backetName,
             ObjectName = file.FileName,
             ContentType = file.ContentType,
+            ExpaireOn = DateTime.UtcNow.AddMinutes(10),
             Id = Guid.NewGuid()
         };
 
@@ -79,39 +79,44 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
 
     }
 
-// remove on production
+    // remove on production
 }).DisableAntiforgery();
 
 
 app.MapGet("/{token:guid:required}", async (
       MediaDbContext dbContext,
        IConfiguration configuration,
-    Guid Token) => {
+    Guid Token) =>
+{
 
-        var foundToken = await dbContext.Tokens.FirstOrDefaultAsync(x => x.Id == Token);
+    var foundToken = await dbContext.Tokens.FirstOrDefaultAsync(x => x.Id == Token && x.ExpaireOn <= DateTime.UtcNow);
 
-        if (foundToken is null)
-            throw new InvalidOperationException();
+    if (foundToken is null)
+        throw new InvalidOperationException();
 
-        var endpoint = configuration["MinioStorage:MinioEndpoint"];
-        var accessKey = configuration["MinioStorage:AccessKey"];
-        var secretKey = configuration["MinioStorage:SecretKey"];
-        var minio = new MinioClient()
-                            .WithEndpoint(endpoint)
-                            .WithCredentials(accessKey, secretKey)
-                            .Build();
+    foundToken.CountAccess++;
 
-        var memoeyStream = new MemoryStream(); 
-        GetObjectArgs getObjectArgs = new GetObjectArgs()
-                                   .WithBucket(foundToken.BacketName)
-                                   .WithObject(foundToken.ObjectName)
-                                   .WithCallbackStream((stream) =>
-                                   {
-                                       stream.CopyTo(memoeyStream);
-                                   });
+    var endpoint = configuration["MinioStorage:MinioEndpoint"];
+    var accessKey = configuration["MinioStorage:AccessKey"];
+    var secretKey = configuration["MinioStorage:SecretKey"];
+    var minio = new MinioClient()
+                        .WithEndpoint(endpoint)
+                        .WithCredentials(accessKey, secretKey)
+                        .Build();
 
-        await minio.GetObjectAsync(getObjectArgs);
-        return Results.File(memoeyStream.ToArray(),contentType: foundToken.ContentType);
-    });
+    var memoryStream = new MemoryStream();
+    GetObjectArgs getObjectArgs = new GetObjectArgs()
+                               .WithBucket(foundToken.BacketName)
+                               .WithObject(foundToken.ObjectName)
+                               .WithCallbackStream((stream) =>
+                               {
+                                   stream.CopyTo(memoryStream);
+                               });
+
+    await minio.GetObjectAsync(getObjectArgs);
+    return Results.File(memoryStream.ToArray()
+                        , contentType: foundToken.ContentType);
+
+});
 
 app.Run();
