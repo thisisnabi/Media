@@ -14,7 +14,17 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<MediaDbContext>(configure =>
 {
     configure.UseInMemoryDatabase(Guid.NewGuid().ToString());
-}); 
+});
+
+var endpoint = builder.Configuration["MinioStorage:MinioEndpoint"];
+var accessKey = builder.Configuration["MinioStorage:AccessKey"];
+var secretKey = builder.Configuration["MinioStorage:SecretKey"];
+
+builder.Services.AddMinio(configureClient => configureClient
+            .WithEndpoint(endpoint)
+            .WithCredentials(accessKey, secretKey)
+            .WithSSL(false)
+            .Build());
 
 builder.BrokerConfiure();
 
@@ -35,17 +45,9 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
     IFormFile file,
     MediaDbContext dbContext,
     IPublishEndpoint publisher,
-    IConfiguration configuration) =>
+    IConfiguration configuration,
+    IMinioClient minioClient) =>
 {
-    var endpoint = configuration["MinioStorage:MinioEndpoint"];
-    var accessKey = configuration["MinioStorage:AccessKey"];
-    var secretKey = configuration["MinioStorage:SecretKey"];
-    var minio = new MinioClient()
-                        .WithEndpoint(endpoint)
-                        .WithCredentials(accessKey, secretKey)
-                        .Build();
-
-
     var putObjectArgs = new PutObjectArgs()
                                 .WithBucket(backetName)
                                 .WithObject(file.FileName)
@@ -53,11 +55,10 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
                                 .WithStreamData(file.OpenReadStream())
                                 .WithObjectSize(file.Length);
 
-
     try
     {
 
-        await minio.PutObjectAsync(putObjectArgs);
+        await minioClient.PutObjectAsync(putObjectArgs);
 
         var token = new UrlToken
         {
@@ -84,9 +85,10 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
 
 
 app.MapGet("/{token:guid:required}", async (
-      MediaDbContext dbContext,
-       IConfiguration configuration,
-    Guid Token) =>
+    MediaDbContext dbContext,
+    IConfiguration configuration,
+    Guid Token,
+    IMinioClient minioClient) =>
 {
 
     var foundToken = await dbContext.Tokens.FirstOrDefaultAsync(x => x.Id == Token && x.ExpaireOn <= DateTime.UtcNow);
@@ -95,14 +97,6 @@ app.MapGet("/{token:guid:required}", async (
         throw new InvalidOperationException();
 
     foundToken.CountAccess++;
-
-    var endpoint = configuration["MinioStorage:MinioEndpoint"];
-    var accessKey = configuration["MinioStorage:AccessKey"];
-    var secretKey = configuration["MinioStorage:SecretKey"];
-    var minio = new MinioClient()
-                        .WithEndpoint(endpoint)
-                        .WithCredentials(accessKey, secretKey)
-                        .Build();
 
     var memoryStream = new MemoryStream();
     GetObjectArgs getObjectArgs = new GetObjectArgs()
@@ -113,7 +107,7 @@ app.MapGet("/{token:guid:required}", async (
                                    stream.CopyTo(memoryStream);
                                });
 
-    await minio.GetObjectAsync(getObjectArgs);
+    await minioClient.GetObjectAsync(getObjectArgs);
     return Results.File(memoryStream.ToArray()
                         , contentType: foundToken.ContentType);
 
