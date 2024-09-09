@@ -85,13 +85,13 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
 
 
 app.MapGet("/{token:guid:required}", async (
+    Guid token,
     MediaDbContext dbContext,
     IConfiguration configuration,
-    Guid Token,
     IMinioClient minioClient) =>
 {
 
-    var foundToken = await dbContext.Tokens.FirstOrDefaultAsync(x => x.Id == Token && x.ExpaireOn <= DateTime.UtcNow);
+    var foundToken = await dbContext.Tokens.FirstOrDefaultAsync(x => x.Id == token && x.ExpaireOn <= DateTime.UtcNow);
 
     if (foundToken is null)
         throw new InvalidOperationException();
