@@ -13,7 +13,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<MediaDbContext>(configure =>
 {
-    configure.UseInMemoryDatabase(Guid.NewGuid().ToString());
+    configure.UseInMemoryDatabase("MediaDb");
 });
 
 var endpoint = builder.Configuration["MinioStorage:MinioEndpoint"];
