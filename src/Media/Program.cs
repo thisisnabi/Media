@@ -65,7 +65,7 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
             BacketName = backetName,
             ObjectName = file.FileName,
             ContentType = file.ContentType,
-            ExpaireOn = DateTime.UtcNow.AddMinutes(10),
+            ExpireOn = DateTime.UtcNow.AddMinutes(10),
             Id = Guid.NewGuid()
         };
 
@@ -91,7 +91,7 @@ app.MapGet("/{token:guid:required}", async (
     IMinioClient minioClient) =>
 {
 
-    var foundToken = await dbContext.Tokens.FirstOrDefaultAsync(x => x.Id == token && x.ExpaireOn <= DateTime.UtcNow);
+    var foundToken = await dbContext.Tokens.FirstOrDefaultAsync(x => x.Id == token && x.ExpireOn >= DateTime.UtcNow);
 
     if (foundToken is null)
         throw new InvalidOperationException();
