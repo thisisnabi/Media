@@ -108,7 +108,10 @@ app.MapGet("/{token:guid:required}", async (
                                });
 
     await minioClient.GetObjectAsync(getObjectArgs);
-    return Results.File(memoryStream.ToArray()
+
+    memoryStream.Position = 0;
+
+    return Results.File(memoryStream
                         , contentType: foundToken.ContentType);
 
 });
