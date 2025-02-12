@@ -39,17 +39,16 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapPost("/{backet_name}/{catalog_id}", async (
-    [FromRoute(Name = "backet_name")] string backetName,
+app.MapPost("/{bucket_name}/{catalog_id}", async (
+    [FromRoute(Name = "bucket_name")] string bucketName,
     [FromRoute(Name = "catalog_id")] string catalogId,
     IFormFile file,
     MediaDbContext dbContext,
     IPublishEndpoint publisher,
-    IConfiguration configuration,
     IMinioClient minioClient) =>
 {
     var putObjectArgs = new PutObjectArgs()
-                                .WithBucket(backetName)
+                                .WithBucket(bucketName)
                                 .WithObject(file.FileName)
                                 .WithContentType(file.ContentType)
                                 .WithStreamData(file.OpenReadStream())
@@ -62,7 +61,7 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
 
         var token = new UrlToken
         {
-            BacketName = backetName,
+            BucketName = bucketName,
             ObjectName = file.FileName,
             ContentType = file.ContentType,
             ExpireOn = DateTime.UtcNow.AddMinutes(10),
@@ -87,32 +86,29 @@ app.MapPost("/{backet_name}/{catalog_id}", async (
 app.MapGet("/{token:guid:required}", async (
     Guid token,
     MediaDbContext dbContext,
-    IConfiguration configuration,
-    IMinioClient minioClient) =>
+    IMinioClient minioClient,
+    HttpContext httpContext) =>
 {
-
     var foundToken = await dbContext.Tokens.FirstOrDefaultAsync(x => x.Id == token && x.ExpireOn >= DateTime.UtcNow);
 
     if (foundToken is null)
         throw new InvalidOperationException();
 
     foundToken.CountAccess++;
-
-    var memoryStream = new MemoryStream();
+    await dbContext.SaveChangesAsync();
+    
     GetObjectArgs getObjectArgs = new GetObjectArgs()
-                               .WithBucket(foundToken.BacketName)
+                               .WithBucket(foundToken.BucketName)
                                .WithObject(foundToken.ObjectName)
-                               .WithCallbackStream((stream) =>
+                               .WithCallbackStream( async (stream, cancellationToken) =>
                                {
-                                   stream.CopyTo(memoryStream);
+                                   httpContext.Response.ContentType = foundToken.ContentType;
+                                   await stream.CopyToAsync(httpContext.Response.Body, cancellationToken);
                                });
-
+    
     await minioClient.GetObjectAsync(getObjectArgs);
-
-    memoryStream.Position = 0;
-
-    return Results.File(memoryStream
-                        , contentType: foundToken.ContentType);
+    
+    return Results.Empty;
 
 });
 
