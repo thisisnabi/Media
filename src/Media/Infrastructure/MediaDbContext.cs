@@ -19,7 +19,7 @@ public class UrlToken
 {
     public Guid Id { get; set; }
 
-    public required string BacketName { get; set; }
+    public required string BucketName { get; set; }
 
     public required string ObjectName { get; set; }
 
